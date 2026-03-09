@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Harness Engineering: Spec이 코드를 대체하는 시대의 개발자 역할</title>
+<title>Harness Engineering: Spec이 코드보다 먼저인 시대, 개발자는 무엇을 하는가</title>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&family=JetBrains+Mono:wght@400;500;700&family=Playfair+Display:wght@700;900&display=swap" rel="stylesheet">
 <style>
   :root {
@@ -329,7 +329,7 @@
     <div class="hero-badge">Harness Engineering</div>
     <h1>개발자의 주 업무가<br>코드 작성에서<br><em>Spec 리뷰</em>로 바뀐다</h1>
     <p class="hero-sub">
-      AI가 코드를 쓰는 시대, 개발자는 무엇을 해야 하는가?<br>
+      Spec이 코드보다 먼저인 시대, 개발자는 무엇을 하는가?<br>
       Spec-Driven Development의 실무적 해법을 제안한다.
     </p>
   </div>
@@ -340,16 +340,13 @@
 <!-- ════════════════════════ INTRO ════════════════════════ -->
 <div class="section-block">
   <p>
-    2025년 하반기, 소프트웨어 개발 업계의 주요 플레이어들은
-    Spec을 코드보다 상위의 산출물로 다루는 방향으로 수렴하고 있다.
-    OpenAI의 Sean Grove는 AI Engineer World's Fair에서 "Spec이 새로운 코드"라 선언했고,
-    AWS는 Kiro라는 Spec-Driven IDE를 출시했으며,
-    GitHub는 Spec Kit이라는 오픈소스 툴킷을 공개했다.
+    2025년 하반기, 소프트웨어 업계의 주요 플레이어들이
+    Spec을 코드보다 상위의 산출물로 다루는 방향으로 움직이고 있다.
+    하지만 한 가지 빠진 이야기가 있다.
+    그 Spec을 <strong>누가, 어떻게</strong> 쓰는가?
   </p>
 
   <p>
-    하지만 한 가지 빠진 이야기가 있다.
-    그 Spec을 <strong>누가, 어떻게</strong> 쓰는가?
     대부분의 논의는 "개발자가 Spec을 작성하면 AI가 코드를 생성한다"에서 멈춘다.
     이 글에서는 그 다음 질문을 다룬다.
   </p>
@@ -383,6 +380,7 @@
     이 추측 영역이 넓을수록 코드의 품질 편차가 커지고, 테스트의 기준도 모호해진다.
     반대로 <strong>Spec이 이 모든 것을 명시하면</strong>,
     AI는 추측 없이 코드를 생성할 수 있고, 테스트도 Spec에서 자동 도출된다.
+    이 글에서는 이러한 접근을 <strong>Harness Engineering</strong>이라 부른다.
   </p>
 
   <!-- Diagram: Spec 결정성 스펙트럼 -->
@@ -442,9 +440,9 @@
   </p>
 
   <p>
-    Harness Engineering의 핵심 전제는 바로 이것이다.
+    Harness Engineering의 핵심 전제는 이 전제 위에 성립한다.
     이상적으로는 <strong>Spec이 프로젝트를 재현하는 가장 중요한 상위 설계 자산</strong>이 되어야 하고,
-    Spec을 기반으로 프로젝트의 주요 구조와 동작을 재생성할 수 있어야 한다.
+    Spec을 기반으로 주요 비즈니스 로직과 도메인 규칙을 재생성할 수 있어야 한다.
     이를 위해 Spec의 결정성은 최대한 높아야 한다.
   </p>
 </div>
@@ -541,11 +539,12 @@
   </p>
 
   <div class="callout warning">
-    <div class="callout-title">⚠️ 현실적인 문제</div>
+    <div class="callout-title">⚠️ 현실적인 딜레마</div>
     <p>
       이 정도 구조의 Spec을 개발자가 모든 유스케이스에 대해 직접 작성하면,
       <strong>그냥 코드를 짜는 것보다 더 오래 걸릴 수 있다.</strong>
-      생산성을 높이려고 도입한 체계가 오히려 생산성을 갉아먹는 역설이 발생한다.
+      구조화된 Spec 작성에 2–3시간, 코드 직접 작성에 1시간이라면,
+      생산성을 높이려고 도입한 체계가 오히려 생산성을 갉아먹는 딜레마가 발생한다.
     </p>
     <p>
       또한 10명의 개발자가 쓰면 10가지 스타일의 Spec이 나온다.
@@ -639,7 +638,7 @@
   <h3>Layer 3: Dev Request — 개발자가 쓴다</h3>
 
   <p>
-    기획자의 PRD를 기술적 관점으로 번역한 문서다.
+    기획자의 PRD(Product Requirements Document)를 기술적 관점으로 번역한 문서다.
     업계에서 쓰이는 RFC(Request for Comments)나 Design Doc의 경량화 버전에 해당한다.
     자연어로 쓰되, 변경 의도, 영향 범위, As-Is/To-Be, 금지 사항 같은 '판단의 입력'을 담는다.
     개발 상황에 따라 무게가 달라진다:
@@ -667,12 +666,45 @@
 - discount가 subtotal 초과 시 tax = 0
 </pre>
 
-  <h3>Layer 2: HLD / LLD — AI가 생성하고, 개발자가 리뷰한다</h3>
+  <p>
+    이 Dev Request를 받은 AI는 기존 상위 Spec(도메인 규칙, 세율 정책 등)을 컨텍스트로 참조하여
+    다음과 같은 Spec을 생성한다:
+  </p>
+
+<pre>
+## Rule: 세금 계산 (updated via DR-2025-003)
+
+### Trigger
+- 주문 체크아웃 시점에 실행한다
+
+### Formula
+- `tax = (subtotal - discount) * tax_rate`
+
+### Edge Cases
+| 조건                    | 결과                              |
+|------------------------|----------------------------------|
+| discount >= subtotal   | tax = 0                          |
+| 주문에 면세 상품 포함     | 면세 상품을 subtotal에서 제외 후 계산 |
+
+### Constraints
+- tax_rate: `shipping_address.state` 기준 → 세율 정책 참조
+- 반올림: `HALF_UP`, 소수점 2자리
+</pre>
+
+  <p>
+    Dev Request 자체는 간결하지만,
+    <strong>AI는 상위 계층 Spec을 컨텍스트로 참조하여 빈틈을 채운다.</strong>
+    도메인 규칙, 세율 정책, 할인 정책 같은 기존 Spec이
+    AI가 구조화된 Spec을 생성하는 데 필요한 맥락을 제공한다.
+    만약 참조할 상위 Spec이 부족하면, AI는 개발자에게 역질문한다.
+  </p>
+
+  <h3>Layer 2: HLD(High-Level Design) / LLD(Low-Level Design) — AI가 생성하고, 개발자가 리뷰한다</h3>
 
   <p>
     Dev Request를 받아 AI가 생성하는 설계 문서다.
-    HLD(High-Level Design)는 전체 아키텍처와 컴포넌트 간 관계를,
-    LLD(Low-Level Design)는 클래스, 인터페이스, 데이터 흐름의 상세 설계를 담는다.
+    HLD는 전체 아키텍처와 컴포넌트 간 관계를,
+    LLD는 클래스, 인터페이스, 데이터 흐름의 상세 설계를 담는다.
   </p>
 
   <p>
@@ -700,10 +732,10 @@
   </p>
 </div>
 
-<!-- ════════════════════════ SECTION 5 ════════════════════════ -->
+<!-- ════════════════════════ SECTION 5 (merged 05+06) ════════════════════════ -->
 <div class="section-block">
   <span class="section-num">05</span>
-  <h2>각 문서의 역할과 정합성</h2>
+  <h2>Spec 유지보수와 정합성 관리</h2>
 
   <p>
     3계층 구조에서 가장 중요한 원칙은 <strong>정합성 체크의 범위를 제한하는 것</strong>이다.
@@ -734,12 +766,8 @@
     <p><strong>세부사항이 맞지 않을 때</strong> (엣지케이스 누락, 설계 선택 변경, 참조 오류) → Spec을 직접 수정.</p>
     <p>매번 Dev Request로 돌아가서 재생성하면 비효율적인 루프에 빠진다. 직접 수정한 내용이 최종 Spec에 반영되면 그것이 곧 새로운 진실이다.</p>
   </div>
-</div>
 
-<!-- ════════════════════════ SECTION 6 ════════════════════════ -->
-<div class="section-block">
-  <span class="section-num">06</span>
-  <h2>왜 모든 변경이 Spec에 반영되어야 하는가</h2>
+  <h3>왜 모든 변경이 Spec에 반영되어야 하는가</h3>
 
   <p>
     "버그 수정은 Spec 없이 바로 코드만 고치면 안 되나?"라는 질문이 나올 수 있다.
@@ -796,7 +824,7 @@
 
   <p>
     둘째, <strong>재개발 시 누락된다.</strong>
-    Harness Engineering의 궁극적 목표는 Spec 기반으로 프로젝트의 주요 구조와 동작을 재생성하는 것이다.
+    Harness Engineering의 궁극적 목표는 Spec 기반으로 주요 비즈니스 로직과 도메인 규칙을 재생성하는 것이다.
     Spec에 없는 변경은 그냥 사라진다.
   </p>
 
@@ -820,92 +848,63 @@
   </div>
 </div>
 
-<!-- ════════════════════════ SECTION 7 ════════════════════════ -->
+<!-- ════════════════════════ SECTION 6: NFR과 구현 힌트 ════════════════════════ -->
 <div class="section-block">
-  <span class="section-num">07</span>
-  <h2>운영 시나리오별 워크플로우</h2>
+  <span class="section-num">06</span>
+  <h2>NFR과 구현 힌트</h2>
 
   <p>
-    Harness Engineering의 정규 프로세스(Dev Request → HLD/LLD → Spec → 코드)는
-    모든 상황에 동일하게 적용되지 않는다.
-    실무에서는 장애 대응, 성능 튜닝, 아키텍처 변경 등 다양한 상황이 발생하며,
-    각 상황에 맞는 워크플로우가 필요하다.
+    Spec이 "무엇을(What)" 정의하고 코드가 "어떻게(How)" 구현한다는 원칙은 명확하다.
+    하지만 구현 레벨의 최적화를 코드에서만 처리하면,
+    재개발 시 그 최적화를 재현할 수 없다.
+    쿼리 튜닝, 인덱스 설계, 캐시 전략 같은 시행착오로 얻은 지식이
+    코드 안에만 묻혀 있으면, AI가 Spec 기반으로 코드를 재생성할 때
+    같은 시행착오를 처음부터 반복하게 된다.
   </p>
 
-  <table class="comparison-table">
-    <thead>
-      <tr>
-        <th>상황</th>
-        <th>워크플로우</th>
-        <th>Spec 영향</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td><strong>장애 긴급배포</strong></td>
-        <td>코드 직접 수정 → 배포 → 사후 DR + Spec 동기화</td>
-        <td>있음 (사후)</td>
-      </tr>
-      <tr>
-        <td><strong>쿼리/인덱스/캐시 튜닝</strong></td>
-        <td>코드 직접 수정</td>
-        <td>없음 (Spec 범위 밖)</td>
-      </tr>
-      <tr>
-        <td><strong>알고리즘/아키텍처 변경</strong></td>
-        <td>DR → Spec → 코드 (정규 프로세스)</td>
-        <td>있음</td>
-      </tr>
-      <tr>
-        <td><strong>NFR 기준 미달 발견</strong></td>
-        <td>DR → Spec NFR 섹션 갱신 → 코드</td>
-        <td>있음</td>
-      </tr>
-    </tbody>
-  </table>
-
-  <h3>장애 긴급배포 (Hotfix)</h3>
-
-  <p>
-    장애 상황에서 Dev Request를 쓰고 Spec을 갱신하고 있을 수는 없다.
-    이 경우는 <strong>코드 선반영 → 배포 → 사후 동기화</strong>가 원칙이다.
-    핵심은 "사후 동기화를 반드시 한다"는 것이며,
-    이를 강제하는 장치(예: Hotfix PR에 "Spec 동기화 완료" 체크박스)가 있으면
-    운영 가능하다.
-  </p>
-
-  <h3>성능 이슈 개선</h3>
-
-  <p>
-    성능 이슈는 Spec이 커버하는 범위에 따라 워크플로우가 달라진다.
-  </p>
-
-  <p>
-    <strong>구현 레벨 최적화</strong>(쿼리 튜닝, 인덱스 추가, 캐시 적용)는
-    비즈니스 로직 변경이 아니라서 Spec에 반영할 내용이 거의 없다.
-    이런 작업은 Spec 영역 밖이며, 코드를 직접 수정하면 된다.
-  </p>
-
-  <p>
-    반면 <strong>아키텍처 레벨 변경</strong>(알고리즘 전환, 배치 처리 방식 변경, 동기→비동기 전환)은
-    시스템의 동작 방식을 바꾸므로 Spec에 영향을 준다.
-    이 경우는 정규 프로세스(Dev Request → Spec → 코드)를 따르는 것이 맞다.
-  </p>
-
-  <div class="callout">
-    <div class="callout-title">Spec의 성능 커버리지</div>
+  <div class="callout warning">
+    <div class="callout-title">⚠️ Spec에 Why와 What만 있고 How가 없으면, AI는 같은 시행착오를 반복한다</div>
     <p>
-      Spec의 NFR(비기능 요구사항) 섹션에는 "응답 시간 p95 &lt; 200ms" 같은
-      <strong>성능 기준</strong>을 정의한다.
-      그 기준을 달성하기 위한 <strong>구현 방법</strong>(인덱스, 캐시, 커넥션 풀 등)은 Spec 범위 밖이다.
-      즉, "무엇을 달성해야 하는가"는 Spec에, "어떻게 달성하는가"는 코드에 속한다.
+      성능 기준은 NFR로 명시할 수 있지만,
+      그 기준을 달성하기 위해 거친 시행착오까지 Spec에 남기지 않으면
+      결정성은 떨어질 수밖에 없다.
     </p>
   </div>
+
+  <p>
+    이를 해결하기 위해 Spec의 NFR(비기능 요구사항) 섹션에
+    <strong>성능 기준</strong>과 함께 <strong>구현 힌트(Implementation Hints)</strong>를 남긴다.
+  </p>
+
+<pre>
+### NFR: 성능
+- 주문 조회 API: p95 &lt; 200ms, p99 &lt; 500ms
+
+### 구현 힌트 (Implementation Hints)
+- orders 테이블: created_at 기준 월별 파티셔닝 필수 (미적용 시 풀스캔)
+- 세금 계산: tax_rate 조회를 매 요청마다 하지 않고 캐시 적용 (TTL 1h)
+- 할인 검증: discount_rules 테이블 JOIN 대신 선계산된 discount_amount 컬럼 사용
+</pre>
+
+  <p>
+    구현 힌트는 Spec의 결정성을 높이지 않지만,
+    <strong>시행착오로 얻은 운영 지식을 보존한다.</strong>
+    AI가 코드를 재생성할 때 이 힌트를 참조하면,
+    "파티셔닝 없이 배포 → 풀스캔 발생 → 장애 → 파티셔닝 적용"이라는
+    비용이 큰 학습 루프를 건너뛸 수 있다.
+  </p>
+
+  <p>
+    구현 힌트는 Spec의 정규 규칙(Rule, Edge Case, Constraint)과 성격이 다르다.
+    규칙은 "반드시 이렇게 해야 한다"는 제약이고,
+    힌트는 "이렇게 하면 더 낫다"는 권장이다.
+    AI는 힌트를 무시할 수도 있지만, 대부분의 경우 따르는 것이 합리적이다.
+  </p>
 </div>
 
-<!-- ════════════════════════ SECTION 8 ════════════════════════ -->
+<!-- ════════════════════════ SECTION 7 (was 08) ════════════════════════ -->
 <div class="section-block">
-  <span class="section-num">08</span>
+  <span class="section-num">07</span>
   <h2>업계는 같은 방향을 가리키고 있다</h2>
 
   <p>
@@ -991,9 +990,9 @@
   </table>
 </div>
 
-<!-- ════════════════════════ SECTION 9 ════════════════════════ -->
+<!-- ════════════════════════ SECTION 8 (was 09) ════════════════════════ -->
 <div class="section-block">
-  <span class="section-num">09</span>
+  <span class="section-num">08</span>
   <h2>개발자의 역할은 어떻게 바뀌는가</h2>
 
   <!-- Diagram: 역할 변화 -->
@@ -1094,6 +1093,15 @@
     <strong>개발자는 "무엇을 만들어야 하는지"를 쓰고 (Dev Request),
     AI는 "어떻게 설계하고 구현해야 하는지"를 쓰고 (HLD/LLD → Spec),
     개발자는 "이게 맞는지"를 검증하고 직접 수정한다 (Spec Review)</strong>.
+  </p>
+
+  <p>
+    물론 프로토타이핑이나 탐색적 개발처럼 Spec이 오히려 방해가 되는 단계도 있다.
+    레거시 시스템에 도입하는 것도 쉽지 않다.
+    AI가 생성한 Spec의 품질을 검증하는 것 자체가 새로운 역량을 요구하기도 한다.
+    하지만 이러한 한계가 있더라도,
+    "코드만 남기고 설계 의도는 버리는" 기존 방식보다는
+    Spec을 중심에 두는 접근이 더 나은 출발점이라고 본다.
   </p>
 
   <p>
