@@ -823,6 +823,89 @@
 <!-- ════════════════════════ SECTION 7 ════════════════════════ -->
 <div class="section-block">
   <span class="section-num">07</span>
+  <h2>운영 시나리오별 워크플로우</h2>
+
+  <p>
+    Harness Engineering의 정규 프로세스(Dev Request → HLD/LLD → Spec → 코드)는
+    모든 상황에 동일하게 적용되지 않는다.
+    실무에서는 장애 대응, 성능 튜닝, 아키텍처 변경 등 다양한 상황이 발생하며,
+    각 상황에 맞는 워크플로우가 필요하다.
+  </p>
+
+  <table class="comparison-table">
+    <thead>
+      <tr>
+        <th>상황</th>
+        <th>워크플로우</th>
+        <th>Spec 영향</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>장애 긴급배포</strong></td>
+        <td>코드 직접 수정 → 배포 → 사후 DR + Spec 동기화</td>
+        <td>있음 (사후)</td>
+      </tr>
+      <tr>
+        <td><strong>쿼리/인덱스/캐시 튜닝</strong></td>
+        <td>코드 직접 수정</td>
+        <td>없음 (Spec 범위 밖)</td>
+      </tr>
+      <tr>
+        <td><strong>알고리즘/아키텍처 변경</strong></td>
+        <td>DR → Spec → 코드 (정규 프로세스)</td>
+        <td>있음</td>
+      </tr>
+      <tr>
+        <td><strong>NFR 기준 미달 발견</strong></td>
+        <td>DR → Spec NFR 섹션 갱신 → 코드</td>
+        <td>있음</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>장애 긴급배포 (Hotfix)</h3>
+
+  <p>
+    장애 상황에서 Dev Request를 쓰고 Spec을 갱신하고 있을 수는 없다.
+    이 경우는 <strong>코드 선반영 → 배포 → 사후 동기화</strong>가 원칙이다.
+    핵심은 "사후 동기화를 반드시 한다"는 것이며,
+    이를 강제하는 장치(예: Hotfix PR에 "Spec 동기화 완료" 체크박스)가 있으면
+    운영 가능하다.
+  </p>
+
+  <h3>성능 이슈 개선</h3>
+
+  <p>
+    성능 이슈는 Spec이 커버하는 범위에 따라 워크플로우가 달라진다.
+  </p>
+
+  <p>
+    <strong>구현 레벨 최적화</strong>(쿼리 튜닝, 인덱스 추가, 캐시 적용)는
+    비즈니스 로직 변경이 아니라서 Spec에 반영할 내용이 거의 없다.
+    이런 작업은 Spec 영역 밖이며, 코드를 직접 수정하면 된다.
+  </p>
+
+  <p>
+    반면 <strong>아키텍처 레벨 변경</strong>(알고리즘 전환, 배치 처리 방식 변경, 동기→비동기 전환)은
+    시스템의 동작 방식을 바꾸므로 Spec에 영향을 준다.
+    이 경우는 정규 프로세스(Dev Request → Spec → 코드)를 따르는 것이 맞다.
+  </p>
+
+  <div class="callout">
+    <div class="callout-title">Spec의 성능 커버리지</div>
+    <p>
+      Spec의 NFR(비기능 요구사항) 섹션에는 "응답 시간 p95 &lt; 200ms" 같은
+      <strong>성능 기준</strong>을 정의한다.
+      그 기준을 달성하기 위한 <strong>구현 방법</strong>(인덱스, 캐시, 커넥션 풀 등)은 Spec 범위 밖이다.
+      즉, "무엇을 달성해야 하는가"는 Spec에, "어떻게 달성하는가"는 코드에 속한다.
+    </p>
+  </div>
+</div>
+
+<!-- ════════════════════════ SECTION 8 ════════════════════════ -->
+<div class="section-block">
+  <span class="section-num">08</span>
   <h2>업계는 같은 방향을 가리키고 있다</h2>
 
   <p>
@@ -908,9 +991,9 @@
   </table>
 </div>
 
-<!-- ════════════════════════ SECTION 8 ════════════════════════ -->
+<!-- ════════════════════════ SECTION 9 ════════════════════════ -->
 <div class="section-block">
-  <span class="section-num">08</span>
+  <span class="section-num">09</span>
   <h2>개발자의 역할은 어떻게 바뀌는가</h2>
 
   <!-- Diagram: 역할 변화 -->
