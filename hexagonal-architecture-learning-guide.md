@@ -1145,7 +1145,7 @@ class OrderPlacedEventHandler(
     private val createShipmentUseCase: CreateShipmentUseCase,
     private val shipmentRepository: ShipmentRepository,
 ) {
-    @EventListener
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     fun handle(event: OrderPlaced) {
         // 멱등성 체크: 이미 처리된 주문인지 확인
         if (shipmentRepository.existsByOrderId(event.orderId)) {

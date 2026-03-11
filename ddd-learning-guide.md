@@ -768,15 +768,99 @@ class SpringDomainEventPublisher(
 }
 ```
 
-### 동기 vs 비동기 이벤트 발행
+### 이벤트 리스너의 진화 — @EventListener → @TransactionalEventListener → Outbox
 
-| 방식 | 구현 | 장점 | 단점 | 사용 시점 |
-|------|------|------|------|----------|
-| **동기 (In-Process)** | Spring `@EventListener` | 간단, 같은 트랜잭션 가능 | 강결합, 성능 병목 | 같은 서비스 내 컨텍스트 간 |
-| **비동기 (메시지 브로커)** | Kafka, RabbitMQ | 느슨한 결합, 확장성 | 복잡성 증가, 이벤트 유실 가능 | 서비스 간, MSA |
-| **Transactional Outbox** | DB 테이블 + 폴링/CDC | 이벤트 유실 방지 | 추가 인프라 | 신뢰성이 중요한 경우 |
+실무에서 이벤트 발행은 단계적으로 발전한다. 각 단계의 문제점과 해결책을 솔직하게 다룬다.
 
-> 💡 **실전 팁**: 처음에는 Spring `@EventListener` + `@TransactionalEventListener`로 시작하고, 서비스가 분리될 때 Kafka 등 메시지 브로커로 전환하는 것이 현실적이다.
+#### Step 1: @EventListener — 간단하지만 위험하다
+
+위 코드 예시에서 `@EventListener`를 사용했다. 이 방식의 치명적 문제:
+
+```
+1. Application Service에서 eventPublisher.publish(event) 호출 → 이벤트 즉시 발행
+2. 그런데 트랜잭션이 아직 커밋되지 않은 상태!
+3. 만약 이후 로직에서 예외 발생 → 트랜잭션 롤백
+4. 하지만 이벤트는 이미 발행됨 → 주문은 없는데 배송이 생성되는 사고
+```
+
+**@EventListener는 트랜잭션 커밋 여부와 무관하게 즉시 실행된다.** 이것이 근본적인 문제다.
+
+#### Step 2: @TransactionalEventListener — 커밋 후에만 실행
+
+Spring의 `@TransactionalEventListener`를 사용하면 **트랜잭션이 성공적으로 커밋된 후에만** 이벤트 리스너가 실행된다.
+
+```kotlin
+// Application Service — 반드시 @Transactional이 선언되어야 한다
+@Transactional
+fun placeOrder(command: PlaceOrderCommand) {
+    val order = Order.create(command)
+    orderRepository.save(order)
+    eventPublisher.publishAll(order.domainEvents())
+    // 이 시점에서 이벤트는 "예약"만 된 상태
+    // 트랜잭션이 커밋되어야 리스너가 실행된다
+}
+
+// Event Listener — 커밋 후에만 실행됨
+@TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+fun on(event: OrderPlacedEvent) {
+    // 주문이 DB에 확실히 저장된 후에만 이 코드가 실행된다
+    createShipmentUseCase.execute(
+        CreateShipmentCommand(orderId = event.orderId, /* ... */)
+    )
+}
+```
+
+**흐름 보장:**
+```
+주문 저장 → 트랜잭션 커밋 → 이벤트 리스너 실행
+            (실패 시)    → 리스너 실행 안 됨 ✅
+```
+
+**@Transactional이 반드시 필요한 이유:** `@TransactionalEventListener`는 현재 활성화된 트랜잭션을 감지해서 커밋 시점에 동작한다. 발행 쪽에 `@Transactional`이 없으면 트랜잭션 자체가 없으므로, **리스너가 아예 실행되지 않는 함정**에 빠진다.
+
+#### Step 3: @TransactionalEventListener의 한계 — 솔직하게
+
+`@TransactionalEventListener`도 만능이 아니다:
+
+| 한계 | 설명 |
+|------|------|
+| **리스너 실패 시 이벤트 유실** | AFTER_COMMIT 이후 리스너에서 예외가 발생하면? 이벤트는 사라진다. 재시도 메커니즘이 없다. |
+| **리스너에서 DB 저장이 필요할 때** | AFTER_COMMIT 시점에는 원래 트랜잭션이 이미 끝났다. 리스너에서 DB를 쓰려면 **별도의 새 트랜잭션**(`@Transactional(propagation = REQUIRES_NEW)`)이 필요하다. |
+| **프로세스 장애** | 커밋 직후, 리스너 실행 전에 서버가 죽으면? 이벤트 유실. |
+
+이 한계를 근본적으로 해결하는 것이 **Outbox 패턴**이다.
+
+#### Step 4: Outbox 패턴 — 이벤트 유실 방지의 끝판왕
+
+Outbox 패턴은 **이벤트를 별도 outbox 테이블에 같은 트랜잭션으로 저장**하는 방식이다:
+
+```
+1. @Transactional 안에서:
+   - 주문 저장 (orders 테이블)
+   - 이벤트 저장 (outbox 테이블)  ← 같은 트랜잭션!
+   → 둘 다 성공하거나 둘 다 실패 (원자성 보장)
+
+2. 별도 폴러(Poller) 또는 CDC(Change Data Capture)가:
+   - outbox 테이블을 주기적으로 읽어서
+   - Kafka 등 메시지 브로커에 발행
+   - 발행 완료 후 outbox 레코드 삭제/마킹
+```
+
+이 가이드에서 Outbox 패턴 구현까지 다루지는 않는다. 깊이 들어가면 인프라 영역이기 때문이다. 핵심만 기억하자: **"이벤트 유실이 비즈니스적으로 치명적이라면 Outbox 패턴을 검토하라."**
+
+**참고 자료:**
+- [Transactional Outbox 패턴 (microservices.io)](https://microservices.io/patterns/data/transactional-outbox.html)
+- [Debezium CDC 기반 Outbox 구현](https://debezium.io/blog/2019/02/19/reliable-microservices-data-exchange-with-the-outbox-pattern/)
+
+#### 정리: 단계별 발전 흐름
+
+| 단계 | 방식 | 장점 | 한계 | 적합한 상황 |
+|------|------|------|------|-----------|
+| 1 | `@EventListener` | 간단 | 롤백돼도 이벤트 발행됨 | 학습용, 프로토타입 |
+| 2 | `@TransactionalEventListener` | 커밋 후 실행 보장 | 리스너 실패 시 유실 | 모놀리스, 유실 허용 가능한 경우 |
+| 3 | **Outbox 패턴** | 이벤트 유실 방지 | 인프라 복잡성 증가 | MSA, 이벤트 유실이 치명적인 경우 |
+
+> 💡 **실전 팁**: 처음부터 Outbox를 도입하지 마라. `@TransactionalEventListener`로 시작하고, 이벤트 유실이 실제로 문제가 되는 시점에 Outbox로 전환하는 것이 현실적이다. 서비스가 분리될 때 Kafka 등 메시지 브로커도 함께 도입한다.
 
 ### 멱등성(Idempotency)과 재시도
 
@@ -788,7 +872,7 @@ class OrderPlacedEventHandler(
     private val createShipmentUseCase: CreateShipmentUseCase,
     private val shipmentRepository: ShipmentRepository,
 ) {
-    @EventListener
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     fun handle(event: OrderPlaced) {
         // 멱등성 체크: 이미 해당 주문의 배송이 생성되었는지 확인
         if (shipmentRepository.existsByOrderId(event.orderId)) {
