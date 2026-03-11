@@ -948,7 +948,73 @@ class Order(
 
 **Aggregate 하나가 너무 많은 것을 포함하는 패턴.** → [5장 Aggregate 설계 원칙](#원칙-3-작게-유지하기) 참조
 
-### 8.3 도메인 로직이 Service에 새어나간 경우
+### 8.3 외부에서 상태를 직접 set하는 메서드 (Setter-style Status Update)
+
+**`updateStatus(newStatus)` 같은 메서드로 외부에서 상태값을 직접 주입하는 패턴.**
+
+```kotlin
+// ❌ 안티패턴 — 외부에서 상태를 직접 set
+class Shipment(
+    private var status: ShipmentStatus = ShipmentStatus.CREATED,
+) {
+    fun updateStatus(newStatus: ShipmentStatus) {
+        val allowed = allowedTransitions[status] ?: emptySet()
+        require(newStatus in allowed) { "상태 전이 불가" }
+        status = newStatus
+    }
+}
+
+// 호출 측: 비즈니스 의도가 전혀 드러나지 않는다
+shipment.updateStatus(ShipmentStatus.PICKED_UP)
+shipment.updateStatus(ShipmentStatus.IN_TRANSIT)
+```
+
+**왜 나쁜가:**
+1. **의도 부재**: "왜 상태가 바뀌는지" 알 수 없다. `updateStatus(CANCELLED)`가 고객 취소인지, 관리자 강제 취소인지 구분 불가
+2. **검증 부족**: 상태 전이 테이블만으로는 각 행위의 전제 조건(운송장 번호 필요 등)을 표현할 수 없다
+3. **이벤트 발행 불가**: 어떤 비즈니스 행위인지 모르므로 적절한 도메인 이벤트를 발행할 수 없다
+4. **Ubiquitous Language 위반**: 비즈니스 전문가는 "상태를 업데이트해"라고 말하지 않는다. "집하해", "출고해", "배송 완료 처리해"라고 말한다
+
+```kotlin
+// ✅ 도메인 행위 메서드 — 비즈니스 의도가 명확
+class Shipment(
+    private var status: ShipmentStatus = ShipmentStatus.CREATED,
+    private var trackingNumber: TrackingNumber? = null,
+) {
+    private val _events = mutableListOf<DomainEvent>()
+    val domainEvents: List<DomainEvent> get() = _events.toList()
+
+    fun pickUp(trackingNumber: TrackingNumber) {
+        require(status == ShipmentStatus.CREATED) { "집하는 CREATED 상태에서만 가능" }
+        this.trackingNumber = trackingNumber
+        this.status = ShipmentStatus.PICKED_UP
+        _events.add(ShipmentPickedUp(id, trackingNumber, Instant.now()))
+    }
+
+    fun deliver() {
+        require(status == ShipmentStatus.OUT_FOR_DELIVERY) { "배송 완료 처리 불가" }
+        this.status = ShipmentStatus.DELIVERED
+        _events.add(ShipmentDelivered(id, Instant.now()))
+    }
+
+    fun cancel(reason: String) {
+        require(status in listOf(ShipmentStatus.CREATED, ShipmentStatus.PICKED_UP)) {
+            "현재 상태에서는 취소 불가"
+        }
+        this.status = ShipmentStatus.CANCELLED
+        _events.add(ShipmentCancelled(id, reason, Instant.now()))
+    }
+}
+
+// 호출 측: 비즈니스 의도가 명확하다
+shipment.pickUp(TrackingNumber("CJ1234567890"))
+shipment.deliver()
+shipment.cancel("고객 변심")
+```
+
+> 💡 **판별 기준**: 메서드 이름이 `update___`, `set___`, `change___`이면 의심하라. 비즈니스 행위 이름(`dispatch`, `approve`, `cancel`, `refund`)으로 바꿀 수 있는지 확인하자.
+
+### 8.4 도메인 로직이 Service에 새어나간 경우
 
 ```kotlin
 // ❌ 배송 가능 여부 판단이 Service에 있음
@@ -977,7 +1043,50 @@ class Shipment {
 
 ## 9. AI와 DDD
 
-### 9.1 AI한테 도메인 모델 설계를 시키는 프롬프트 패턴
+### 9.1 AI가 DDD의 고질적 단점을 해소한다
+
+DDD의 최대 단점은 **높은 러닝커브**와 **초기 파일 대량 생성**이었다. Entity, VO, Aggregate, Repository, Domain Service, Application Service, Domain Event... 하나의 Bounded Context만 잡아도 파일이 20개 이상 나온다. 이 진입 장벽 때문에 많은 팀이 DDD 도입을 포기했다.
+
+**AI 시대에 이 단점이 완전히 사라진다:**
+
+| DDD의 전통적 단점 | AI가 해소하는 방식 |
+|---|---|
+| 초기 파일 대량 생성 (20개+) | AI가 구조째로 30초 만에 생성 |
+| 높은 러닝커브 | AI가 패턴대로 짜주니 생성된 코드를 보면서 학습 |
+| 보일러플레이트 (Port, Adapter, DTO 변환...) | AI가 가장 잘하는 영역 — 반복적이고 결정적인 코드 |
+| 설계 비용 (인터페이스, 패키지 구조...) | 인터페이스만 정하면 나머지는 AI가 채움 |
+
+**반대로, AI의 장점은 DDD의 명확한 경계가 있어야 극대화된다:**
+
+- AI는 **명확한 인터페이스와 규칙**이 주어질수록 정확한 코드를 생성한다
+- DDD의 Bounded Context, Aggregate 경계, Port 인터페이스는 AI에게 **최고의 가이드라인**이 된다
+- 경계 없이 "그냥 만들어줘"라고 하면 AI도 스파게티 코드를 만든다
+
+> 💡 **핵심 인사이트**: DDD/Hexagonal과 AI는 **서로의 약점을 보완하는 관계**다. DDD는 AI에게 명확한 설계 경계를 주고, AI는 DDD의 높은 초기 비용을 제거한다. AI 시대에 DDD를 안 쓸 이유가 사라진 셈이다.
+
+### 9.2 AI Native Engineer — DDD의 본질이 핵심 역량이 되는 시대
+
+과거 엔지니어와 AI Native Engineer의 시간 배분은 근본적으로 다르다:
+
+```
+과거 엔지니어:        ████████████████████ 80% 구현  ████ 20% 설계
+AI Native Engineer:  ████ 20% 구현 감독  ████████████████████ 80% 도메인/비즈니스
+```
+
+**AI가 못하는 것 = 사람이 해야 하는 것 = DDD의 본질:**
+
+| AI가 못하는 것 | DDD에서의 역할 |
+|---|---|
+| 도메인 모델링 (어떤 Aggregate로 나눌지) | Strategic + Tactical Design의 핵심 판단 |
+| 모듈 경계 설계 (Bounded Context 분리) | Context Map 설계 |
+| 비즈니스 규칙 판단 ("이 규칙이 맞나?") | 불변식(Invariant) 정의 |
+| 이해관계자와 대화해서 Ubiquitous Language 만들기 | DDD의 출발점이자 핵심 |
+
+AI가 구현을 맡으니, 사람은 **더 비즈니스와 도메인에 포커스**하게 된다. 이것이 DDD가 원래 추구했던 이상적인 모습이다 — 코드가 아니라 **도메인에 집중하는 엔지니어**.
+
+> 💡 **결론**: DDD의 본질(도메인 모델링, 경계 설계, Ubiquitous Language)은 AI가 대체할 수 없으며, 이것이 곧 AI Native Engineer의 핵심 역량이다. AI 시대일수록 DDD를 제대로 아는 엔지니어의 가치가 올라간다.
+
+### 9.3 AI한테 도메인 모델 설계를 시키는 프롬프트 패턴
 
 #### 패턴 1: 요구사항 → 도메인 모델 도출
 
@@ -1029,7 +1138,7 @@ DDD 원칙에 맞게 리팩토링해줘.
 - Kotlin + Spring Boot
 ```
 
-### 9.2 AI가 잘하는 / 못하는 DDD 영역
+### 9.4 AI가 잘하는 / 못하는 DDD 영역
 
 | 영역 | AI가 잘하는 것 | AI가 못하는 것 |
 |------|--------------|---------------|

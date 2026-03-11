@@ -364,9 +364,17 @@ data class Address(
 
 #### Domain Layer — Aggregate Root
 
+> **⚠️ 안티패턴 주의: `updateStatus(newStatus)` 같은 setter 메서드**
+>
+> 외부에서 상태값을 직접 set하는 메서드(`updateStatus`, `setStatus` 등)는 DDD 안티패턴이다.
+> - **문제**: 누구나 아무 상태로든 바꿀 수 있어서, 상태 전이 규칙이 깨진다
+> - **문제**: "왜 상태가 바뀌었는지" 비즈니스 의도가 코드에 드러나지 않는다
+> - **문제**: 도메인 이벤트를 적절히 발행할 수 없다 (어떤 행위인지 모르니까)
+> - **해결**: `pickUp()`, `startTransit()`, `deliver()`, `cancel()` 등 **비즈니스 행위를 이름으로** 표현하는 메서드를 만들고, 메서드 내부에서 상태 검증 → 변경 → 이벤트 발행을 처리한다
+
 ```kotlin
 // Shipment: 배송 Aggregate Root
-// Aggregate 내부 상태 변경은 반드시 Root 메서드를 통해서만
+// Aggregate 내부 상태 변경은 반드시 Root의 도메인 행위 메서드를 통해서만
 
 enum class ShipmentStatus {
     CREATED, PICKED_UP, IN_TRANSIT, OUT_FOR_DELIVERY, DELIVERED, RETURNED, CANCELLED
@@ -384,32 +392,73 @@ class Shipment private constructor(
     val status get() = _status
     val trackingNumber get() = _trackingNumber
 
-    fun assignTrackingNumber(trackingNumber: TrackingNumber) {
+    // ──────────────────────────────────────────────────────
+    // 도메인 행위 메서드: 외부에서 상태값을 직접 set하지 않고,
+    // 비즈니스 행위를 통해 내부에서 상태를 변경한다.
+    // 각 메서드가 (1) 현재 상태 검증 (2) 상태 변경 (3) 이벤트 발행을 담당한다.
+    // ──────────────────────────────────────────────────────
+
+    private val _events = mutableListOf<DomainEvent>()
+    val domainEvents: List<DomainEvent> get() = _events.toList()
+    fun clearEvents() = _events.clear()
+
+    /** 집하 처리 — 택배사가 물건을 수거했을 때 */
+    fun pickUp(trackingNumber: TrackingNumber) {
+        require(_status == ShipmentStatus.CREATED) {
+            "집하는 CREATED 상태에서만 가능합니다. 현재: $_status"
+        }
         check(_trackingNumber == null) { "이미 운송장 번호가 할당됨" }
         _trackingNumber = trackingNumber
+        _status = ShipmentStatus.PICKED_UP
+        _events.add(ShipmentPickedUp(id, trackingNumber, Instant.now()))
     }
 
-    fun updateStatus(newStatus: ShipmentStatus) {
-        val allowed = allowedTransitions[_status] ?: emptySet()
-        require(newStatus in allowed) { "상태 전이 불가: $_status → $newStatus" }
-        _status = newStatus
+    /** 간선 운송 시작 — 물류 허브 간 이동 */
+    fun startTransit() {
+        require(_status == ShipmentStatus.PICKED_UP) {
+            "간선 운송은 PICKED_UP 상태에서만 가능합니다. 현재: $_status"
+        }
+        _status = ShipmentStatus.IN_TRANSIT
+        _events.add(ShipmentInTransit(id, Instant.now()))
     }
 
+    /** 배송 출발 — 최종 배송 기사가 배달 시작 */
+    fun startDelivery() {
+        require(_status == ShipmentStatus.IN_TRANSIT) {
+            "배송 출발은 IN_TRANSIT 상태에서만 가능합니다. 현재: $_status"
+        }
+        _status = ShipmentStatus.OUT_FOR_DELIVERY
+        _events.add(ShipmentOutForDelivery(id, Instant.now()))
+    }
+
+    /** 배송 완료 */
+    fun deliver() {
+        require(_status == ShipmentStatus.OUT_FOR_DELIVERY) {
+            "배송 완료는 OUT_FOR_DELIVERY 상태에서만 가능합니다. 현재: $_status"
+        }
+        _status = ShipmentStatus.DELIVERED
+        _events.add(ShipmentDelivered(id, Instant.now()))
+    }
+
+    /** 반송 처리 — 수취 거부, 주소 불명 등 */
+    fun returnShipment(reason: String) {
+        require(_status in listOf(ShipmentStatus.IN_TRANSIT, ShipmentStatus.OUT_FOR_DELIVERY)) {
+            "반송은 IN_TRANSIT 또는 OUT_FOR_DELIVERY 상태에서만 가능합니다. 현재: $_status"
+        }
+        _status = ShipmentStatus.RETURNED
+        _events.add(ShipmentReturned(id, reason, Instant.now()))
+    }
+
+    /** 배송 취소 — 아직 간선 운송 전에만 가능 */
     fun cancel(reason: String) {
-        check(_status in listOf(ShipmentStatus.CREATED, ShipmentStatus.PICKED_UP)) {
+        require(_status in listOf(ShipmentStatus.CREATED, ShipmentStatus.PICKED_UP)) {
             "현재 상태(${_status})에서는 취소할 수 없습니다"
         }
         _status = ShipmentStatus.CANCELLED
+        _events.add(ShipmentCancelled(id, reason, Instant.now()))
     }
 
     companion object {
-        private val allowedTransitions = mapOf(
-            ShipmentStatus.CREATED to setOf(ShipmentStatus.PICKED_UP, ShipmentStatus.CANCELLED),
-            ShipmentStatus.PICKED_UP to setOf(ShipmentStatus.IN_TRANSIT, ShipmentStatus.CANCELLED),
-            ShipmentStatus.IN_TRANSIT to setOf(ShipmentStatus.OUT_FOR_DELIVERY, ShipmentStatus.RETURNED),
-            ShipmentStatus.OUT_FOR_DELIVERY to setOf(ShipmentStatus.DELIVERED, ShipmentStatus.RETURNED),
-        )
-
         fun create(id: ShipmentId, orderId: OrderId, address: Address,
                    carrier: CarrierType, shippingFee: ShippingFee) =
             Shipment(id, orderId, address, carrier, shippingFee)
@@ -637,20 +686,33 @@ class ShippingFeeServiceTest {
 class ShipmentTest {
 
     @Test
-    fun `CREATED에서 DELIVERED로 직접 전이하면 예외 발생`() {
+    fun `CREATED에서 바로 배송 완료하면 예외 발생`() {
         val shipment = Shipment.create(/* ... */)
-        assertThatThrownBy { shipment.updateStatus(ShipmentStatus.DELIVERED) }
+        // deliver()는 OUT_FOR_DELIVERY 상태에서만 가능
+        assertThatThrownBy { shipment.deliver() }
             .isInstanceOf(IllegalArgumentException::class.java)
-            .hasMessageContaining("상태 전이 불가")
+            .hasMessageContaining("OUT_FOR_DELIVERY 상태에서만")
     }
 
     @Test
-    fun `배송 중 상태에서는 취소할 수 없다`() {
+    fun `정상적인 배송 흐름 — pickUp → startTransit → startDelivery → deliver`() {
         val shipment = Shipment.create(/* ... */)
-        shipment.updateStatus(ShipmentStatus.PICKED_UP)
-        shipment.updateStatus(ShipmentStatus.IN_TRANSIT)
+        shipment.pickUp(TrackingNumber("CJ1234567890"))
+        shipment.startTransit()
+        shipment.startDelivery()
+        shipment.deliver()
+        // 각 단계마다 도메인 이벤트가 발행됨
+        assertThat(shipment.domainEvents).hasSize(4)
+    }
+
+    @Test
+    fun `배송 중(IN_TRANSIT) 상태에서는 취소할 수 없다`() {
+        val shipment = Shipment.create(/* ... */)
+        shipment.pickUp(TrackingNumber("CJ1234567890"))
+        shipment.startTransit()
         assertThatThrownBy { shipment.cancel("고객 변심") }
-            .isInstanceOf(IllegalStateException::class.java)
+            .isInstanceOf(IllegalArgumentException::class.java)
+            .hasMessageContaining("취소할 수 없습니다")
     }
 }
 ```
@@ -797,7 +859,8 @@ HanjinAdapter.kt 전체 코드
 
 ## 코딩 컨벤션
 - VO는 data class 또는 value class
-- Entity 상태 변경은 메서드로 (var 최소화)
+- Entity 상태 변경은 도메인 행위 메서드로 (updateStatus/setStatus 금지 → dispatch/deliver/cancel 등 행위 이름 사용)
+- 각 행위 메서드 내부에서: 상태 검증(require/check) → 상태 변경 → 도메인 이벤트 발행
 - 한국어 에러 메시지
 
 ## 테스트
