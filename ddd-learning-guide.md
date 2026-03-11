@@ -210,6 +210,81 @@ Event Storming 결과          Tactical Design
 
 > 💡 **판별 기준**: "이 로직이 DB나 외부 시스템과 무관하게, 순수하게 비즈니스 규칙인가?" → Yes면 Domain Service. "여러 단계를 조율하는 흐름인가?" → Yes면 Application Service.
 
+### 3.3 🔥 DDD의 현실적 모호함 — 솔직한 이야기
+
+위의 Application Service vs Domain Service 구분이 깔끔해 보이지만, 실무에서는 **경계가 흐려지는 순간이 반드시 온다.** 여기서는 그 혼란을 솔직하게 다룬다.
+
+#### 외부 API 참조가 필요할 때의 고민
+
+Domain Service는 "순수 도메인 로직"이라고 했는데, 만약 **외부 API에서 데이터를 가져와야** 한다면?
+
+예를 들어 배송비 계산 시 택배사 API에서 실시간 요금을 조회해야 하는 경우:
+
+```
+"잠깐, DDD에는 Port라는 개념이 없는데?"
+```
+
+맞다. **Port는 DDD가 아니라 Hexagonal Architecture의 개념이다.** DDD 자체는 "외부 시스템과의 경계를 어떻게 추상화할 것인가"에 대해 명확한 요소를 정의하지 않는다.
+
+실무에서 흔히 쓰는 해법은 **Repository처럼 Domain Service를 인터페이스로 정의하고, Infra 계층에서 구현하는 방식**이다:
+
+```kotlin
+// 도메인 계층 — 인터페이스만 선언
+interface CarrierRateProvider {
+    fun getRate(carrier: CarrierId, weight: Weight, destination: Address): Money
+}
+
+// 인프라 계층 — 실제 외부 API 호출
+class CjLogisticsRateAdapter(
+    private val cjClient: CjLogisticsApiClient,
+) : CarrierRateProvider {
+    override fun getRate(carrier: CarrierId, weight: Weight, destination: Address): Money {
+        val response = cjClient.fetchRate(/* ... */)
+        return Money(response.fee)
+    }
+}
+```
+
+이때 **핵심 판단 기준은 "누가 그 로직의 주인인가?"** 이다:
+
+| 상황 | 판단 | 설계 방향 |
+|------|------|----------|
+| 계산 자체를 외부에 위임 (택배사가 요금을 결정) | 외부가 로직의 주인 | Domain Service **인터페이스**로 위임 선언, Infra에서 구현 |
+| 도메인 로직인데 외부 데이터만 필요 (환율 조회 → 내부에서 계산) | 우리가 로직의 주인 | **데이터 조회 인터페이스** + Domain Service에서 로직 수행 |
+
+**솔직히 말하면, 이 구분이 항상 명확하지 않다.** "택배사가 기본 요금을 주고, 우리가 도서산간 추가 요금을 더하는" 케이스는 어디에 해당하는가? 팀마다 해석이 다르고, 정답은 없다. 중요한 건 **팀 내에서 일관된 기준을 합의**하는 것이다.
+
+#### DDD의 본질적 한계
+
+이런 혼란이 생기는 근본적인 이유가 있다:
+
+**DDD는 "개발 방법론"이지, "구현 프레임워크"가 아니다.**
+
+DDD는 Entity, Value Object, Aggregate, Domain Service, Repository 같은 개념을 제공하지만, 모든 실무 상황에 딱 맞는 요소가 다 정의되어 있지 않다. 외부 시스템과의 통신, 읽기/쓰기 분리, 이벤트 저장 같은 구현 수준의 문제에 대해 DDD 자체는 말이 없다.
+
+그래서 실무에서는 다른 패턴을 빌려온다:
+
+| 부족한 부분 | 빌려오는 패턴 |
+|------------|-------------|
+| 외부 시스템 추상화 | Hexagonal의 **Port / Adapter** |
+| 읽기/쓰기 최적화 | **CQRS** (Command Query Responsibility Segregation) |
+| 이벤트 이력 관리 | **Event Sourcing** |
+| 비동기 통신 | **메시지 브로커** 패턴 (Kafka, RabbitMQ) |
+
+**이 모호함이 DDD를 어렵게 느끼게 하는 가장 큰 원인 중 하나다.** "DDD대로 했는데 외부 API 호출은 어디에 넣지?"라는 질문에 DDD 책은 명쾌한 답을 주지 않는다.
+
+하지만 그게 DDD의 약점이 아니다. **DDD는 "사고 방식"이기 때문이다.** "도메인을 중심에 놓고 설계하라"는 철학이지, "이 클래스를 이 패키지에 넣어라"는 매뉴얼이 아니다. 구현 수준의 가이드가 필요하면 Hexagonal, CQRS 같은 패턴을 조합해서 쓰는 것이 자연스럽고, 실무에서 대부분 그렇게 한다.
+
+#### 신입에게
+
+- **"정답"을 찾으려 하지 마라.** DDD 학습 중 "이게 Domain Service인가 Application Service인가", "이건 Port인가 Repository인가" 같은 고민에 빠지는 건 당연하다. 모든 상황에 맞는 깔끔한 정답은 없다.
+
+- **팀과 도메인에 맞는 해석을 합의하는 과정 자체가 DDD다.** "우리 팀에서는 외부 API 추상화를 이렇게 하기로 했다"라는 팀 규칙이 생기면, 그게 곧 너희 팀의 DDD다.
+
+- **혼란스러운 건 너만 그런 게 아니다.** 경력 개발자들도 이 경계에서 고민한다. 그 혼란을 팀 규칙으로 정리하고, 코드에 일관되게 반영하는 것이 성장이다.
+
+> 💡 **핵심 메시지**: DDD는 "이렇게 구현하라"가 아니라 "이렇게 생각하라"다. 구현에서 막히면 Hexagonal, CQRS 같은 패턴을 빌려와라. 그리고 그 판단을 팀과 합의하라. 그 과정이 DDD다.
+
 ---
 
 ## 4. Tactical Design (전술적 설계)
